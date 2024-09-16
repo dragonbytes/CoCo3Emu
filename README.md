@@ -6,16 +6,20 @@ Why write yet another CoCo 3 emulator when we already have an excellent assortme
 <br><br>
 
 **Things that are working:**
-- Most of the various video modes
+- 6809 CPU Core
+- Most of the various video modes (Both CoCo 3 and CoCo-compatible ones)
 - Joystick support either using the keyboard or mouse for Host Computer input
 - Emulated Floppy Disk READ support
 - Virtual Hard Drive (.vhd) Read/Write support
+- Simple built-in command-line style interface for configuring the emulator, mounting disk images, etc.
 
 **Things NOT working or NOT implemented at all yet:**
+- 6309 CPU Support
 - Emulated Floppy Disk WRITE support
 - Sound
 - Serial (Bitbanger) support
 - Printer support
 - Using Host Computer gamepads as input for Joystick
+- A more user-friendly way to configure the emulator
 - Probably alot more stuff I haven't even realized yet :-D
-    
+
