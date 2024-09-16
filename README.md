@@ -1,4 +1,4 @@
-Ever since discovering Jeff Vascouver's Tandy Color Computer 3 emulator back in the late 90s, i've itched to try my own hand at writing one myself. Over the intervening years since then, I have gradually been learning more and more of the skills needed to actually make an attempt at it, and I finally believe I'm (mostly) ready! I intend for it to be an open-source cross-platform emulator, so feel free check out my progress in the code. 
+Ever since discovering Jeff Vascouver's Tandy Color Computer 3 emulator back in the late 90s, i've been itching to try my own hand at writing one myself. Over the intervening years since then, I have gradually been learning more and more of the skills needed to actually make an attempt at it, and I finally believe I'm (mostly) ready! I intend for it to be an open-source cross-platform emulator, so feel free check out my progress in the code. 
 
 **Things that are working:**
 - Most of the various video modes
