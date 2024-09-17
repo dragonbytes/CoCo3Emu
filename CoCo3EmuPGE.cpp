@@ -191,7 +191,8 @@ bool CoCoEmuPGE::OnConsoleCommand(const std::string& sText)
 		std::string testImagePath = "Z:\\Documents\\Coco_Code\\coco3emu\\out_640_225_4.raw";
 		FILE* testImageFile = nullptr;
 
-		fopen_s(&testImageFile, testImagePath.c_str(), "rb");
+		testImageFile = fopen(testImagePath.c_str(), "rb");
+		//fopen_s(&testImageFile, testImagePath.c_str(), "rb");
 		fseek(testImageFile, 0, SEEK_END);
 		long testImageFileSize = ftell(testImageFile);
 		fseek(testImageFile, 0, SEEK_SET);				// Return file pointer to beginning of file again
@@ -356,7 +357,8 @@ void CoCoEmuPGE::commandLOADM(std::string inputFilename)
 {
 	// Load a CoCo .BIN file into RAM (for testing purposes)
 	FILE* cocoBinFile = nullptr;
-	fopen_s(&cocoBinFile, inputFilename.c_str(), "rb");
+	cocoBinFile = fopen(inputFilename.c_str(), "rb");
+	//fopen_s(&cocoBinFile, inputFilename.c_str(), "rb");
 	uint8_t headerBuffer[5];
 	uint8_t fileBuffer[0x10000];
 	char stringBuffer[128];
@@ -376,7 +378,8 @@ void CoCoEmuPGE::commandLOADM(std::string inputFilename)
 		}
 		execAddress = (headerBuffer[3] * 256) + headerBuffer[4];
 		uiLoadmHasExecAddr = true;
-		sprintf_s(stringBuffer, sizeof(stringBuffer), "File loaded. Execution address = $%04X", execAddress);
+		//sprintf_s(stringBuffer, sizeof(stringBuffer), "File loaded. Execution address = $%04X", execAddress);
+		sprintf(stringBuffer, "File loaded. Execution address = $%04X", execAddress);
 		std::cout << stringBuffer << std::endl;
 		fclose(cocoBinFile);
 	}
@@ -430,8 +433,10 @@ DeviceROM* CoCoEmuPGE::loadFileROM(const char* romFilePath)
 {
 	FILE* romFile = nullptr;
 
-	int romOpenResult = fopen_s(&romFile, romFilePath, "rb");
-	if (romOpenResult)
+	romFile = fopen(romFilePath, "rb");
+	//int romOpenResult = fopen_s(&romFile, romFilePath, "rb");
+	//if (romOpenResult)
+	if (romFile == NULL)
 		return nullptr;
 
 	fseek(romFile, 0, SEEK_END);

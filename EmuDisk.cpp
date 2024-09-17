@@ -9,7 +9,9 @@ EmuDisk::EmuDisk()
 
 uint8_t EmuDisk::vhdMountDisk(uint8_t driveNum, std::string diskImageFilePath)
 {
-	if (fopen_s(&emuDiskDrive[driveNum].vhdImageFile, diskImageFilePath.c_str(), "rb+") != 0)
+	emuDiskDrive[driveNum].vhdImageFile = fopen(diskImageFilePath.c_str(), "rb+");
+	if (emuDiskDrive[driveNum].vhdImageFile == NULL)
+	//if (fopen_s(&emuDiskDrive[driveNum].vhdImageFile, diskImageFilePath.c_str(), "rb+") != 0)
 		return EMUDISK_ERROR_OPENING_DISK_IMAGE;
 
 	fseek(emuDiskDrive[driveNum].vhdImageFile, 0, SEEK_END);

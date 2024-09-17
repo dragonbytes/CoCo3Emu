@@ -296,7 +296,8 @@ int Cpu6809::addrModeImmediateByte()
 {
 	operandByte = readByteAtCurPC();
 
-	sprintf_s(curOpAddressString, sizeof(curOpAddressString), "#$%02x", operandByte);
+	//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "#$%02x", operandByte);
+	sprintf(curOpAddressString, "#$%02x", operandByte);
 	return ADDR_IMMEDIATE_BYTE;
 }
 
@@ -304,14 +305,16 @@ int Cpu6809::addrModeImmediateWord()
 {
 	operandWord = readWordAtCurPC();
 
-	sprintf_s(curOpAddressString, sizeof(curOpAddressString), "#$%04x", operandWord);
+	//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "#$%04x", operandWord);
+	sprintf(curOpAddressString, "#$%04x", operandWord);
 	return ADDR_IMMEDIATE_WORD;
 }
 
 int Cpu6809::addrModeImmediateRegs()
 {
 	operandByte = readByteAtCurPC();
-	sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%s,%s", interRegNames[operandByte >> 4].c_str(), interRegNames[operandByte & 0x0F].c_str());
+	//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%s,%s", interRegNames[operandByte >> 4].c_str(), interRegNames[operandByte & 0x0F].c_str());
+	sprintf(curOpAddressString, "%s,%s", interRegNames[operandByte >> 4].c_str(), interRegNames[operandByte & 0x0F].c_str());
 	return ADDR_IMMEDIATE_BYTE;
 }
 
@@ -364,7 +367,8 @@ int Cpu6809::addrModeImmediateStack()
 			disasmStackList += ",PC";
 		else
 			disasmStackList += "PC";
-	sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%s", disasmStackList.c_str());
+	//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%s", disasmStackList.c_str());
+	sprintf(curOpAddressString, "%s", disasmStackList.c_str());
 	#endif
 
 	return ADDR_IMMEDIATE_BYTE;
@@ -375,7 +379,8 @@ int Cpu6809::addrModeDirect()
 	operandByte = readByteAtCurPC();
 	effectiveAddr = ((cpuReg.DP * 256) + operandByte);
 
-	sprintf_s(curOpAddressString, sizeof(curOpAddressString), "<$%02x", operandByte);
+	//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "<$%02x", operandByte);
+	sprintf(curOpAddressString, "<$%02x", operandByte);
 	return ADDR_DIRECT;
 }
 
@@ -384,7 +389,8 @@ int Cpu6809::addrModeExtended()
 	operandWord = readWordAtCurPC();
 	effectiveAddr = operandWord;
 
-	sprintf_s(curOpAddressString, sizeof(curOpAddressString), "$%04x", operandWord);
+	//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "$%04x", operandWord);
+	sprintf(curOpAddressString, "$%04x", operandWord);
 	return ADDR_EXTENDED;
 }
 
@@ -405,67 +411,79 @@ int Cpu6809::addrModeIndexed()
 			// "Constant offset from R" modes
 		case 0b10000100:	// Non-Indirect addressing (No offset)
 			effectiveAddr = *indexedRegOrder[registerID];						// Use the Register ID as an index to lookup pointer to actual register value in our code
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), ",%c", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), ",%c", indexRegName[registerID]);
+			sprintf(curOpAddressString, ",%c", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10010100:	// Indirect addressing (No offset)
 			curOpCodeCycleCount += 3;											// Uses an additional 3 cycles to perform the instruction
 			effectiveAddr = gimeBus->readMemoryWord(*indexedRegOrder[registerID]);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[,%c]", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[,%c]", indexRegName[registerID]);
+			sprintf(curOpAddressString, "[,%c]", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10001000:	// Non-Indirect addressing (8-bit offset)
 			curOpCodeCycleCount++;												// Uses 1 additional cpu cycle
 			signedByte = readByteAtCurPC();
 			effectiveAddr = *indexedRegOrder[registerID] + signedByte;			// Cast the unsigned byte into a signed one
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%d,%c", signedByte, indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%d,%c", signedByte, indexRegName[registerID]);
+			sprintf(curOpAddressString, "%d,%c", signedByte, indexRegName[registerID]);
 			return ADDR_INDEXED_WORD;
 		case 0b10011000:	// Indirect addressing (8-bit offset)
 			curOpCodeCycleCount += 4;											// Uses 4 additional cycles
 			signedByte = readByteAtCurPC();
 			effectiveAddr = gimeBus->readMemoryWord(*indexedRegOrder[registerID] + signedByte);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[%d,%c]", signedByte, indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[%d,%c]", signedByte, indexRegName[registerID]);
+			sprintf(curOpAddressString, "[%d,%c]", signedByte, indexRegName[registerID]);
 			return ADDR_INDEXED_WORD;
 		case 0b10001001:	// Non-Indirect addressing (16-bit offset)
 			curOpCodeCycleCount += 4;
 			signedWord = readWordAtCurPC();
 			effectiveAddr = *indexedRegOrder[registerID] + signedWord;		// Cast the unsigned word into a signed one
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%d,%c", signedWord, indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%d,%c", signedWord, indexRegName[registerID]);
+			sprintf(curOpAddressString, "%d,%c", signedWord, indexRegName[registerID]);
 			return ADDR_INDEXED_DWORD;
 		case 0b10011001:	// Indirect addressing (16-bit offset)
 			curOpCodeCycleCount += 7;
 			signedWord = readWordAtCurPC();
 			effectiveAddr = gimeBus->readMemoryWord(*indexedRegOrder[registerID] + signedWord);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[%d,%c]", signedWord, indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[%d,%c]", signedWord, indexRegName[registerID]);
+			sprintf(curOpAddressString, "[%d,%c]", signedWord, indexRegName[registerID]);
 			return ADDR_INDEXED_DWORD;
 			// "Accumulator offset from R" modes (signed)
 		case 0b10000110:	// Non-Indirect addressing (A register offset)
 			curOpCodeCycleCount++;												// Uses 1 additional cpu cycle
 			effectiveAddr = *indexedRegOrder[registerID] + (int8_t)cpuReg.Acc.A;
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "A,%c", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "A,%c", indexRegName[registerID]);
+			sprintf(curOpAddressString, "A,%c", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10010110:	// Indirect addressing (A register offset)
 			curOpCodeCycleCount += 4;											// Uses 4 additional cpu cycles
 			effectiveAddr = gimeBus->readMemoryWord(*indexedRegOrder[registerID] + (int8_t)cpuReg.Acc.A);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[A,%c]", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[A,%c]", indexRegName[registerID]);
+			sprintf(curOpAddressString, "[A,%c]", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10000101:	// Non-Indirect addressing (B register offset)
 			curOpCodeCycleCount++;												// Uses 1 additional cpu cycle
 			effectiveAddr = *indexedRegOrder[registerID] + (int8_t)cpuReg.Acc.B;
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "B,%c", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "B,%c", indexRegName[registerID]);
+			sprintf(curOpAddressString, "B,%c", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10010101:	// Indirect addressing (B register offset)
 			curOpCodeCycleCount += 4;											// Uses 4 additional cpu cycles
 			effectiveAddr = gimeBus->readMemoryWord(*indexedRegOrder[registerID] + (int8_t)cpuReg.Acc.B);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[B,%c]", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[B,%c]", indexRegName[registerID]);
+			sprintf(curOpAddressString, "[B,%c]", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10001011:	// Non-Indirect addressing (D register offset)
 			curOpCodeCycleCount += 4;
 			effectiveAddr = *indexedRegOrder[registerID] + (int16_t)cpuReg.Acc.D;
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "D,%c", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "D,%c", indexRegName[registerID]);
+			sprintf(curOpAddressString, "D,%c", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10011011:	// Indirect addressing (D register offset)
 			curOpCodeCycleCount += 7;
 			effectiveAddr = gimeBus->readMemoryWord(*indexedRegOrder[registerID] + (int16_t)cpuReg.Acc.D);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[D,%c]", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[D,%c]", indexRegName[registerID]);
+			sprintf(curOpAddressString, "[D,%c]", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 			// "Auto Increment/Decrement of R" modes
 		case 0b10000000:	// Non-Indirect addressing (Post-increment by 1)
@@ -473,70 +491,81 @@ int Cpu6809::addrModeIndexed()
 			effectiveAddr = *indexedRegOrder[registerID];
 			if ((curOpCode < 0x30) || (curOpCode > 0x33) || (opcodeToIndexRegLookup[curOpCode & 0x03]) != registerID)	// Skip auto-increment if LEAx instruction refers to itself in operand
 				*indexedRegOrder[registerID] += 1;
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), ",%c+", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), ",%c+", indexRegName[registerID]);
+			sprintf(curOpAddressString, ",%c+", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10000001:	// Non-Indirect addressing (Post-increment by 2)
 			curOpCodeCycleCount += 3;
 			effectiveAddr = *indexedRegOrder[registerID];
 			if ((curOpCode < 0x30) || (curOpCode > 0x33) || (opcodeToIndexRegLookup[curOpCode & 0x03]) != registerID)	// Skip auto-increment if LEAx instruction refers to itself in operand
 				*indexedRegOrder[registerID] += 2;
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), ",%c++", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), ",%c++", indexRegName[registerID]);
+			sprintf(curOpAddressString, ",%c++", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10010001:	// Indirect addressing (Post-increment by 2)
 			curOpCodeCycleCount += 6;
 			effectiveAddr = gimeBus->readMemoryWord(*indexedRegOrder[registerID]);
 			*indexedRegOrder[registerID] += 2;
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[,%c++]", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[,%c++]", indexRegName[registerID]);
+			sprintf(curOpAddressString, "[,%c++]", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10000010:	// Non-Indirect addressing (Pre-decrement by 1)
 			curOpCodeCycleCount += 2;
 			*indexedRegOrder[registerID] -= 1;
 			effectiveAddr = *indexedRegOrder[registerID];
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), ",-%c", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), ",-%c", indexRegName[registerID]);
+			sprintf(curOpAddressString, ",-%c", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10000011:	// Non-Indirect addressing (Pre-decrement by 2)
 			curOpCodeCycleCount += 3;
 			*indexedRegOrder[registerID] -= 2;
 			effectiveAddr = *indexedRegOrder[registerID];
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), ",--%c", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), ",--%c", indexRegName[registerID]);
+			sprintf(curOpAddressString, ",--%c", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 		case 0b10010011:	// Indirect addressing (Pre-decrement by 2)
 			curOpCodeCycleCount += 6;
 			*indexedRegOrder[registerID] -= 2;
 			effectiveAddr = gimeBus->readMemoryWord(*indexedRegOrder[registerID]);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[,--%c]", indexRegName[registerID]);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[,--%c]", indexRegName[registerID]);
+			sprintf(curOpAddressString, "[,--%c]", indexRegName[registerID]);
 			return ADDR_INDEXED_BYTE;
 			// "Constant Offset from PC" modes (signed)
 		case 0b10001100:	// Non-Indirect addressing (8-bit offset)
 			curOpCodeCycleCount++;
 			signedByte = readByteAtCurPC();
 			effectiveAddr = (cpuReg.PC + signedByte);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%d,PCR", signedByte);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%d,PCR", signedByte);
+			sprintf(curOpAddressString, "%d,PCR", signedByte);
 			return ADDR_INDEXED_WORD;
 		case 0b10011100:	// Indirect addressing (8-bit offset)
 			curOpCodeCycleCount += 4;
 			signedByte = readByteAtCurPC();
 			effectiveAddr = gimeBus->readMemoryWord(cpuReg.PC + signedByte);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[%d,PCR]", signedByte);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[%d,PCR]", signedByte);
+			sprintf(curOpAddressString, "[%d,PCR]", signedByte);
 			return ADDR_INDEXED_WORD;
 		case 0b10001101:	// Non-Indirect addressing (16-bit offset)
 			curOpCodeCycleCount += 5;
 			signedWord = readWordAtCurPC();
 			effectiveAddr = (cpuReg.PC + signedWord);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "$%04x,PCR", signedWord);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "$%04x,PCR", signedWord);
+			sprintf(curOpAddressString, "$%04x,PCR", signedWord);
 			return ADDR_INDEXED_DWORD;
 		case 0b10011101:	// Indirect addressing (16-bit offset)
 			curOpCodeCycleCount += 8;
 			signedWord = readWordAtCurPC();
 			effectiveAddr = gimeBus->readMemoryWord(cpuReg.PC + signedWord);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[$%04x,PCR]", signedWord);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[$%04x,PCR]", signedWord);
+			sprintf(curOpAddressString, "[$%04x,PCR]", signedWord);
 			return ADDR_INDEXED_DWORD;
 			// "Extended Indirect" mode
 		case 0b10011111:	// Indirect addressing (16-bit address)
 			curOpCodeCycleCount += 5;
 			operandWord = readWordAtCurPC();
 			effectiveAddr = gimeBus->readMemoryWord(operandWord);
-			sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[$%04x]", operandWord);
+			//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "[$%04x]", operandWord);
+			sprintf(curOpAddressString, "[$%04x]", operandWord);
 			return ADDR_INDEXED_DWORD;
 		}
 	}
@@ -550,7 +579,8 @@ int Cpu6809::addrModeIndexed()
 
 		curOpCodeCycleCount++;													// Uses 1 additional cpu cycle
 		effectiveAddr = *indexedRegOrder[registerID] + signedByte;
-		sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%d,%c", signedByte, indexRegName[registerID]);
+		//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "%d,%c", signedByte, indexRegName[registerID]);
+		sprintf(curOpAddressString, "%d,%c", signedByte, indexRegName[registerID]);
 	}
 	return ADDR_INDEXED_BYTE;
 }
@@ -560,7 +590,8 @@ int Cpu6809::addrModeRelativeByte()
 	operandByte = readByteAtCurPC();
 	effectiveAddr = cpuReg.PC + (int8_t)operandByte;
 
-	sprintf_s(curOpAddressString, sizeof(curOpAddressString), "$%04x", effectiveAddr);
+	//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "$%04x", effectiveAddr);
+	sprintf(curOpAddressString, "$%04x", effectiveAddr);
 	return ADDR_RELATIVE_BYTE;
 }
 
@@ -569,7 +600,8 @@ int Cpu6809::addrModeRelativeWord()
 	operandWord = readWordAtCurPC();
 	effectiveAddr = cpuReg.PC + (int16_t)operandWord;
 
-	sprintf_s(curOpAddressString, sizeof(curOpAddressString), "$%04x", effectiveAddr);
+	//sprintf_s(curOpAddressString, sizeof(curOpAddressString), "$%04x", effectiveAddr);
+	sprintf(curOpAddressString, "$%04x", effectiveAddr);
 	return ADDR_RELATIVE_WORD;
 }
 
@@ -1976,38 +2008,47 @@ void Cpu6809::printDebugMsgs()
 
 	if (debuggerStepEnabled)
 	{
-		sprintf_s(flagsString, sizeof(flagsString), "cc=%02x a=%02x b=%02x e=00 f=00 dp=%02x x=%04x y=%04x u=%04x s=%04x v=0000\r\n", cpuReg.CC.Byte, cpuReg.Acc.A, cpuReg.Acc.B, cpuReg.DP, cpuReg.X, cpuReg.Y, cpuReg.U, cpuReg.S);
+		//sprintf_s(flagsString, sizeof(flagsString), "cc=%02x a=%02x b=%02x e=00 f=00 dp=%02x x=%04x y=%04x u=%04x s=%04x v=0000\r\n", cpuReg.CC.Byte, cpuReg.Acc.A, cpuReg.Acc.B, cpuReg.DP, cpuReg.X, cpuReg.Y, cpuReg.U, cpuReg.S);
+		sprintf(flagsString, "cc=%02x a=%02x b=%02x e=00 f=00 dp=%02x x=%04x y=%04x u=%04x s=%04x v=0000\r\n", cpuReg.CC.Byte, cpuReg.Acc.A, cpuReg.Acc.B, cpuReg.DP, cpuReg.X, cpuReg.Y, cpuReg.U, cpuReg.S);
 		switch (curAddrMode)
 		{
 		case ADDR_INHERENT:
 			if ((curOpCode == 0x10) || (curOpCode == 0x11))
-				sprintf_s(disasmString, sizeof(disasmString), "%04x| %04x      ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC));
+				//sprintf_s(disasmString, sizeof(disasmString), "%04x| %04x      ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC));
+				sprintf(disasmString, "%04x| %04x      ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC));
 			else
-				sprintf_s(disasmString, sizeof(disasmString), "%04x| %02x          ", debuggerRegPC, curOpCode);
+				//sprintf_s(disasmString, sizeof(disasmString), "%04x| %02x          ", debuggerRegPC, curOpCode);
+				sprintf(disasmString, "%04x| %02x          ", debuggerRegPC, curOpCode);
 			break;
 		case ADDR_IMMEDIATE_BYTE:
 		case ADDR_INDEXED_BYTE:
 		case ADDR_DIRECT:
 		case ADDR_RELATIVE_BYTE:
 			if ((curOpCode == 0x10) || (curOpCode == 0x11))
-				sprintf_s(disasmString, sizeof(disasmString), "%04x| %02x%04x      ", debuggerRegPC, curOpCode, gimeBus->readMemoryWord(debuggerRegPC + 1));
+				//sprintf_s(disasmString, sizeof(disasmString), "%04x| %02x%04x      ", debuggerRegPC, curOpCode, gimeBus->readMemoryWord(debuggerRegPC + 1));
+				sprintf(disasmString, "%04x| %02x%04x      ", debuggerRegPC, curOpCode, gimeBus->readMemoryWord(debuggerRegPC + 1));
 			else
-				sprintf_s(disasmString, sizeof(disasmString), "%04x| %04x        ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC));
+				//sprintf_s(disasmString, sizeof(disasmString), "%04x| %04x        ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC));
+				sprintf(disasmString, "%04x| %04x        ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC));
 			break;
 		case ADDR_IMMEDIATE_WORD:
 		case ADDR_INDEXED_WORD:
 		case ADDR_RELATIVE_WORD:
 		case ADDR_EXTENDED:
 			if ((curOpCode == 0x10) || (curOpCode == 0x11))
-				sprintf_s(disasmString, sizeof(disasmString), "%04x| %04x%04x    ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC), gimeBus->readMemoryWord(debuggerRegPC + 2));
+				//sprintf_s(disasmString, sizeof(disasmString), "%04x| %04x%04x    ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC), gimeBus->readMemoryWord(debuggerRegPC + 2));
+				sprintf(disasmString, "%04x| %04x%04x    ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC), gimeBus->readMemoryWord(debuggerRegPC + 2));
 			else
-				sprintf_s(disasmString, sizeof(disasmString), "%04x| %02x%04x      ", debuggerRegPC, gimeBus->readMemoryByte(debuggerRegPC), gimeBus->readMemoryWord(debuggerRegPC + 1));
+				//sprintf_s(disasmString, sizeof(disasmString), "%04x| %02x%04x      ", debuggerRegPC, gimeBus->readMemoryByte(debuggerRegPC), gimeBus->readMemoryWord(debuggerRegPC + 1));
+				sprintf(disasmString, "%04x| %02x%04x      ", debuggerRegPC, gimeBus->readMemoryByte(debuggerRegPC), gimeBus->readMemoryWord(debuggerRegPC + 1));
 			break;
 		case ADDR_INDEXED_DWORD:
 			if ((curOpCode == 0x10) || (curOpCode == 0x11))
-				sprintf_s(disasmString, sizeof(disasmString), "%04x| %04x%02x%04x    ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC), gimeBus->readMemoryByte(debuggerRegPC + 2), gimeBus->readMemoryWord(debuggerRegPC + 3));
+				//sprintf_s(disasmString, sizeof(disasmString), "%04x| %04x%02x%04x    ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC), gimeBus->readMemoryByte(debuggerRegPC + 2), gimeBus->readMemoryWord(debuggerRegPC + 3));
+				sprintf(disasmString, "%04x| %04x%02x%04x    ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC), gimeBus->readMemoryByte(debuggerRegPC + 2), gimeBus->readMemoryWord(debuggerRegPC + 3));
 			else
-				sprintf_s(disasmString, sizeof(disasmString), "%04x| %04x%04x    ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC), gimeBus->readMemoryWord(debuggerRegPC + 2));
+				//sprintf_s(disasmString, sizeof(disasmString), "%04x| %04x%04x    ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC), gimeBus->readMemoryWord(debuggerRegPC + 2));
+				sprintf(disasmString, "%04x| %04x%04x    ", debuggerRegPC, gimeBus->readMemoryWord(debuggerRegPC), gimeBus->readMemoryWord(debuggerRegPC + 2));
 			break;
 		}
 

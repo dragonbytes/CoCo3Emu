@@ -37,7 +37,10 @@ uint8_t FD502::fdcInsertDisk(uint8_t driveNum, std::string diskImageFilePath)
 {
 	if (!fdcDrive[driveNum].isDriveAttached)
 		return FD502_ERROR_DRIVE_NOT_ATTACHED;
-	if (fopen_s(&fdcDrive[driveNum].diskImageFile, diskImageFilePath.c_str(), "rb+") != 0)
+
+	fdcDrive[driveNum].diskImageFile = fopen(diskImageFilePath.c_str(), "rb+");
+	if (fdcDrive[driveNum].diskImageFile == NULL)
+	//if (fopen_s(&fdcDrive[driveNum].diskImageFile, diskImageFilePath.c_str(), "rb+") != 0)
 		return FD502_ERROR_OPENING_DISK_IMAGE;
 
 	// At least for now, guess at the disk's geometry based on filesize
