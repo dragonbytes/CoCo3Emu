@@ -9,14 +9,32 @@ EmuDisk::EmuDisk()
 
 uint8_t EmuDisk::vhdMountDisk(uint8_t driveNum, std::string diskImageFilePath)
 {
+	// If HDD image already mounted, close it and try to mount new one
+	if (emuDiskDrive[driveNum].imageMounted)
+		vhdEjectDisk(driveNum);
+
 	emuDiskDrive[driveNum].vhdImageFile = fopen(diskImageFilePath.c_str(), "rb+");
 	if (emuDiskDrive[driveNum].vhdImageFile == NULL)
-	//if (fopen_s(&emuDiskDrive[driveNum].vhdImageFile, diskImageFilePath.c_str(), "rb+") != 0)
 		return EMUDISK_ERROR_OPENING_DISK_IMAGE;
 
 	fseek(emuDiskDrive[driveNum].vhdImageFile, 0, SEEK_END);
 	emuDiskDrive[driveNum].diskImageFilesize = ftell(emuDiskDrive[driveNum].vhdImageFile);
 	emuDiskDrive[driveNum].imageMounted = true;
+	emuDiskDrive[driveNum].imgFilePathname = diskImageFilePath;
+	return EMUDISK_OPERATION_COMPLETE;
+}
+
+uint8_t EmuDisk::vhdEjectDisk(uint8_t driveNum)
+{
+	if (!isEnabled)
+		return EMUDISK_ERROR_NOT_ENABLED;
+	if (!emuDiskDrive[driveNum].imageMounted)
+		return EMUDISK_ERROR_NO_DISK_MOUNTED;
+
+	fclose(emuDiskDrive[driveNum].vhdImageFile);
+	emuDiskDrive[driveNum].imgFilePathname.clear();
+	emuDiskDrive[driveNum].diskImageFilesize = 0;
+	emuDiskDrive[driveNum].imageMounted = false;
 	return EMUDISK_OPERATION_COMPLETE;
 }
 

@@ -1,7 +1,10 @@
 #pragma once
 
 constexpr uint8_t EMUDISK_OPERATION_COMPLETE			= 0x00;
+constexpr uint8_t EMUDISK_ERROR_NOT_ENABLED				= 0x02;
+constexpr uint8_t EMUDISK_ERROR_NO_DISK_MOUNTED			= 0x03;
 constexpr uint8_t EMUDISK_ERROR_OPENING_DISK_IMAGE		= 0x04;
+constexpr uint8_t EMUDISK_ERROR_UNSUPPORTED_DISK_IMAGE	= 0x05;
 
 constexpr uint8_t EMUDISK_STATUS_SUCCESSFUL				= 0;
 constexpr uint8_t EMUDISK_STATUS_ERROR_NOT_ENABLED		= 2;
@@ -12,6 +15,7 @@ struct emuDiskDriveStruct
 {
 	bool imageMounted;
 	long diskImageFilesize;
+	std::string imgFilePathname;
 	FILE* vhdImageFile;
 };
 
@@ -22,6 +26,7 @@ public:
 
 	void ConnectToBus(GimeBus* busPtr) { gimeBus = busPtr; }
 	uint8_t vhdMountDisk(uint8_t, std::string);
+	uint8_t vhdEjectDisk(uint8_t);
 	void registerWrite(uint16_t regAddress, uint8_t paramByte);
 	uint8_t readSector();
 	uint8_t writeSector();
