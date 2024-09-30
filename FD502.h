@@ -19,14 +19,30 @@ constexpr uint8_t FDC_OP_STEP_IN							= 4;
 constexpr uint8_t FDC_OP_STEP_OUT							= 5;
 constexpr uint8_t FDC_OP_READ_SECTOR						= 6;
 constexpr uint8_t FDC_OP_WRITE_SECTOR						= 7;
-constexpr uint8_t FDC_OP_READ_ADDRESS						= 8;
-constexpr uint8_t FDC_OP_WRITE_ADDRESS						= 9;
-constexpr uint8_t FDC_OP_READ_TRACK							= 10;
-constexpr uint8_t FDC_OP_WRITE_TRACK						= 11;
+constexpr uint8_t FDC_OP_READ_TRACK							= 8;
+constexpr uint8_t FDC_OP_WRITE_TRACK						= 9;
+constexpr uint8_t FDC_OP_READ_ADDRESS						= 10;
+constexpr uint8_t FDC_OP_WRITE_ADDRESS						= 11;
 constexpr uint8_t FDC_OP_FORCE_INTERRUPT					= 12;
 
 constexpr uint8_t FDC_LAST_STEPPED_IN						= 0;
 constexpr uint8_t FDC_LAST_STEPPED_OUT						= 1;
+
+constexpr uint8_t FDC_FORMAT_SEGMENT_GAP5					= 0;
+constexpr uint8_t FDC_FORMAT_SEGMENT_INDEX_AM_SYNC			= 1;
+constexpr uint8_t FDC_FORMAT_SEGMENT_GAP1					= 2;
+constexpr uint8_t FDC_FORMAT_SEGMENT_ID_AM_SYNC				= 3;
+constexpr uint8_t FDC_FORMAT_SEGMENT_SECTOR_ID				= 4;
+constexpr uint8_t FDC_FORMAT_SEGMENT_GAP2					= 5;
+constexpr uint8_t FDC_FORMAT_SEGMENT_DATA_AM_SYNC			= 6;
+constexpr uint8_t FDC_FORMAT_SEGMENT_DATA_FIELD				= 7;
+constexpr uint8_t FDC_FORMAT_SEGMENT_GAP3					= 8;
+constexpr uint8_t FDC_FORMAT_SEGMENT_GAP4					= 9;
+
+constexpr uint8_t FDC_SECTOR_INFO_TRACK						= 0;
+constexpr uint8_t FDC_SECTOR_INFO_SIDE						= 1;
+constexpr uint8_t FDC_SECTOR_INFO_SECTOR					= 2;
+constexpr uint8_t FDC_SECTOR_INFO_LENGTH					= 3;
 
 constexpr uint8_t FDC_STATUS_I_NOT_READY					= 0x80;
 constexpr uint8_t FDC_STATUS_I_PROTECTED					= 0x40;
@@ -65,11 +81,12 @@ struct diskImageStruct
 
 struct driveStruct
 {
-	uint8_t totalCylinders;
-	bool isDoubleSided;
-	bool isDoubleDensity;
-	bool isDriveAttached;
-	bool isDiskInserted;
+	uint8_t totalCylinders = 0;
+	bool isDoubleSided = false;
+	bool isDoubleDensity = false;
+	bool isDriveAttached = false;
+	bool isDiskInserted = false;
+	std::string imgFilePathname;
 	FILE* diskImageFile;
 	diskImageStruct* diskImageGeometry;
 };
@@ -83,6 +100,7 @@ public:
 	void fdcAttachNewDrive(uint8_t, uint8_t, bool, bool);	// Params = Drive Number, Total Physical Tracks, Total Sides, Single or Double-densityu
 	void fdcDetachDrive(uint8_t);
 	uint8_t fdcInsertDisk(uint8_t, std::string);
+	uint8_t fdcEjectDisk(uint8_t);
 	void fdcRegisterWrite(uint16_t, uint8_t);
 	uint8_t fdcRegisterRead(uint16_t);
 	uint8_t fdcHandleNextEvent();
@@ -95,6 +113,7 @@ public:
 	bool fdcDoubleDensity;					// false = Single Density, true = Double Density
 	bool fdcHaltFlag;
 	bool fdcHeadLoaded;
+	bool fdcIndexPulse;
 	uint8_t fdcCommandReg, fdcTrackReg, fdcSectorReg, fdcSideSelect, fdcDataReg, fdcStatusReg;
 	uint8_t stepWaitCounter, curStepRate, fdcPendingCommand;
 	driveStruct fdcDrive[3];
@@ -113,14 +132,18 @@ private:
 	void fdcForceInterrupt(uint8_t);
 	uint8_t fdcReadSector();
 	uint8_t fdcWriteSector();
-	uint32_t getDiskImageOffset(uint8_t, uint8_t, uint8_t, uint8_t);
+	uint8_t fdcWriteTrack();
+	bool getDiskImageOffset(uint8_t, uint8_t, uint8_t, uint8_t);
 
 	GimeBus* gimeBus = nullptr;
 	uint8_t physicalTrackPosition, destinationTrack, destinationSector, lastStepDirection;
-	uint16_t bufferPosition;
+	uint8_t formatByte, curFormatSegment, formatSectorInfoIndex, formatSectorInfo[4], fdcByteDelayCounter;
+	uint16_t bufferPosition, formatSectorByteCount, formatTotalBytesCounter;
 	uint8_t fdcStepRateTable[4] = { 6, 12, 20, 30 };
-	uint8_t sectorBuffer[512];
-	bool updateTrackRegFlag, verifyAfterCommand;
+	uint16_t sectorLengthTable[4] = { 128, 256, 512, 1024 };
+	uint8_t sectorBuffer[1024];			// Allocate 1024 bytes for sector buffer as its the maximum sector length supported by the FD502
+	bool updateTrackRegFlag, verifyAfterCommand, formatWritingStarted;
+	uint32_t diskImageOffset;
 
 	// Common CoCo disk image configs
 	// Elements = Total Filesize in bytes, Bytes/Sector, Sectors/Track, Tracks/Side, Total Sides
