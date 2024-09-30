@@ -26,7 +26,7 @@ bool CoCoEmuPGE::OnUserCreate()
 {
 	// Init the sound extension/hardware
 	std::function<float(int, float, float)> soundHandlerFunc = std::bind(&CoCoEmuPGE::SoundHandler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-	olc::SOUND::InitialiseAudio(44100, 2, 8, 512);
+	olc::SOUND::InitialiseAudio(48000, 1, 8, 512);
 	olc::SOUND::SetUserSynthFunction(soundHandlerFunc);
 
 	uiLoadmHasExecAddr = false;
@@ -52,12 +52,24 @@ bool CoCoEmuPGE::OnUserCreate()
 	}
 	printf("Loaded $%04X bytes from Disk 1.1 ROM file.\n", gimeBus.romExternal->readRomSize);
 
-	gimeBus.diskController.fdcAttachNewDrive(0, 80, true, true);
-	printf("Attached 80 track double-sided drive to Drive 0\n");
-	gimeBus.diskController.fdcInsertDisk(0, "Z:\\Documents\\Coco_Code\\EOU\\V101_STD\\68EMU.dsk");
-	printf("Inserted disk into Drive 0\n");
-	gimeBus.emuDiskDriver.isEnabled = true;
-	gimeBus.emuDiskDriver.vhdMountDisk(0, "Z:\\Documents\\Coco_Code\\EOU\\V101_STD\\68SDC.vhd");
+	//gimeBus.diskController.fdcAttachNewDrive(0, 80, true, true);
+	//printf("Attached 80 track double-sided drive to Drive 0\n");
+	//gimeBus.diskController.fdcInsertDisk(0, "Z:\\Documents\\Coco_Code\\EOU\\V101_STD\\68EMU.dsk");
+	//printf("Inserted disk into Drive 0\n");
+	//gimeBus.emuDiskDriver.isEnabled = true;
+	//gimeBus.emuDiskDriver.vhdMountDisk(0, "Z:\\Documents\\Coco_Code\\EOU\\V101_STD\\68SDC.vhd");
+
+	// Attempt to load config file
+	uint8_t configLoadStatus = loadConfigFile();
+	if (configLoadStatus == CONFIG_ERROR_OPENING_FILE)
+		printf("Error: Could not open config file.\n");
+	else if (configLoadStatus == CONFIG_ERROR_INVALID_SYNTAX)
+		printf("Error: Invalid syntax encountered in config file. Aborted.\n");
+	else if (configLoadStatus == CONFIG_ERROR_MOUNTING_DISK)
+		printf("Error: Could not mount disk image in config file.\n");
+	else
+		printf("Successfully loaded config file.\n");
+
 	gimeBus.cpu.assertedInterrupts[INT_RESET] = INT_ASSERT_MASK_RESET;		// This "resets" the CPU to it's initial state and enables it's "clock"
 	cmpOrRgb = 1;	// Set display palette set to RGB by default
 
@@ -85,9 +97,31 @@ bool CoCoEmuPGE::OnUserUpdate(float fElapsedTime)
 	//gimeCycleCounter = residualGimeCycleCount;
 	elapsedGimeClockCycles = (gimeMasterClock_NTSC * fElapsedTime) + residualCycles;
 
+	/*
+	averageElapsedGimeCycles += elapsedGimeClockCycles;
+	averageElapsedGimeCyclesCounter++;
+	if (averageElapsedGimeCyclesCounter >= 2000)
+	{
+		printf("Average elapsed GIME cycles = %f\n", (averageElapsedGimeCycles / 2000));
+		averageElapsedGimeCyclesCounter = 0;
+		averageElapsedGimeCycles = 0;
+	}
+	*/
+
 	while (elapsedGimeClockCycles > 1.0f)
 	{
 		gimeBus.gimeBusClockTick();
+		gimeAudioCounter--;
+		if (gimeAudioCounter <= 0.0f)
+		{
+			//fifoAudioBuffer.push(gimeBus.devPIA1.SideA.dataReg >> 2);	// add a new coco audio sample to our Host audio buffer
+			leftAudioBuffer.push(gimeBus.devPIA1.SideA.dataReg >> 2);
+			//rightAudioBuffer.push(gimeBus.orch90dac.rightChannel);
+			//fifoAudioBuffer.push(newStereoSample);
+			if (!audioBufferReady && leftAudioBuffer.size() >= numSamplesToBuffer)
+				audioBufferReady = true;
+			gimeAudioCounter += gimeAudioCountInterval;
+		}
 		
 		if (gimeBus.dotCounter == 168)
 		{
@@ -178,27 +212,13 @@ bool CoCoEmuPGE::OnConsoleCommand(const std::string& sText)
 	if (commandWord == "LOADM")
 	{
 		filename = nextStringWord(sText);
-		if (filename != "")
-		{
+		if (!filename.empty())
 			commandLOADM(filename);
-		}
+		else
+			std::cout << "Error: No filename was specified." << std::endl;
 	}
 	else if (commandWord == "EXEC")
 		commandEXEC();
-	else if (commandWord == "GFX_TEST")
-	{
-		// load test image in for debugging
-		std::string testImagePath = "Z:\\Documents\\Coco_Code\\coco3emu\\out_640_225_4.raw";
-		FILE* testImageFile = nullptr;
-
-		testImageFile = fopen(testImagePath.c_str(), "rb");
-		//fopen_s(&testImageFile, testImagePath.c_str(), "rb");
-		fseek(testImageFile, 0, SEEK_END);
-		long testImageFileSize = ftell(testImageFile);
-		fseek(testImageFile, 0, SEEK_SET);				// Return file pointer to beginning of file again
-		long readBytes = fread(&gimeBus.physicalRAM[0x00000], 1, testImageFileSize, testImageFile);
-		fclose(testImageFile);
-	}
 	else if (commandWord == "ATTACH")
 	{
 		std::string deviceName = stringToUpper(nextStringWord(sText));
@@ -240,7 +260,7 @@ bool CoCoEmuPGE::OnConsoleCommand(const std::string& sText)
 			else if (inputType == "MOUSE")
 				gimeBus.joystickDevice[portIndexNum].deviceType = JOYSTICK_DEVICE_MOUSE;
 			else if (inputType == "GAMEPAD")
-				gimeBus.joystickDevice[portIndexNum].deviceType = JOYSTICK_DEVICE_CONTROLLER;
+				gimeBus.joystickDevice[portIndexNum].deviceType = JOYSTICK_DEVICE_GAMEPAD;
 			else
 			{
 				std::cout << "Error: Invalid parameter." << std::endl;
@@ -248,6 +268,11 @@ bool CoCoEmuPGE::OnConsoleCommand(const std::string& sText)
 			}
 			gimeBus.joystickDevice[portIndexNum].isAttached = true;
 			std::cout << "Successfully attached " << inputType << " to " << portName << " joystick port." << std::endl;
+		}
+		else if (deviceName.empty())
+		{
+			// Since no subcommands were entered, just display current state/status of attached hardware
+
 		}
 		else
 			std::cout << "Error: Invalid parameter." << std::endl;
@@ -295,24 +320,22 @@ bool CoCoEmuPGE::OnConsoleCommand(const std::string& sText)
 				std::cout << "Error: Disk image mount failed." << std::endl;
 		}
 	}
-	else if (commandWord == "TEST_FDC")
-	{
-		gimeBus.diskController.fdcAttachNewDrive(0, 40, false, true);
-		uint8_t mountResult = gimeBus.diskController.fdcInsertDisk(0, "Z:\\Documents\\Coco_Code\\coco3emu\\disk2.dsk");
-		if (mountResult != FD502_OPERATION_COMPLETE)
-			std::cout << "Mount failed." << std::endl;
-	}
 	else if (commandWord == "EJECT")
 	{
 		uint8_t targetDriveNum = std::stoi(nextStringWord(sText));
-		if (!gimeBus.diskController.fdcDrive[targetDriveNum].isDriveAttached)
-			std::cout << "Error: No drive attached to Drive " << std::to_string(targetDriveNum) << std::endl;
-		else if (!gimeBus.diskController.fdcDrive[targetDriveNum].isDiskInserted)
-			std::cout << "Error: No disk is inserted in Drive " << std::to_string(targetDriveNum) << std::endl;
-		else
+		uint8_t ejectStatus = gimeBus.diskController.fdcEjectDisk(targetDriveNum);
+
+		switch (ejectStatus)
 		{
-			gimeBus.diskController.fdcDrive[targetDriveNum].isDiskInserted = false;
-			std::cout << "Disk has been ejected from Drive " << std::to_string(targetDriveNum) << std::endl;
+		case FD502_OPERATION_COMPLETE:
+			std::cout << "Successfully ejected disk from Drive " << std::to_string(targetDriveNum) << std::endl;
+			break;
+		case FD502_ERROR_DRIVE_NOT_ATTACHED:
+			std::cout << "Error: No drive attached to Drive " << std::to_string(targetDriveNum) << std::endl;
+			break;
+		case FD502_ERROR_NO_DISK_INSERTED:
+			std::cout << "Error: No disk is inserted in Drive " << std::to_string(targetDriveNum) << std::endl;
+			break;
 		}
 	}
 	else if (commandWord == "RESET")
@@ -325,13 +348,61 @@ bool CoCoEmuPGE::OnConsoleCommand(const std::string& sText)
 			std::cout << "Error: Could not open config file for writing." << std::endl;
 			return true;
 		}
-
-		configFile << "[Drives]" << std::endl;
 		
-		for (int i = 0; i < 3; i++)
+		bool anyAttached = (gimeBus.diskController.isConnected || gimeBus.emuDiskDriver.isEnabled);
+		if (anyAttached)
+			configFile << "[Attached]" << std::endl;
+		if (gimeBus.diskController.isConnected)
+			configFile << "Device = FD502" << std::endl;
+		if (gimeBus.emuDiskDriver.isEnabled)
+			configFile << "Device = EmuDisk" << std::endl;
+
+		if (gimeBus.diskController.isConnected)
+			for (int i = 0; i < 3; i++)
+			{
+				if (gimeBus.diskController.fdcDrive[i].isDriveAttached)
+				{
+					configFile << std::endl << "[Drive " << std::to_string(i) << "]" << std::endl;
+					configFile << "PhysicalTracks = " << std::to_string(gimeBus.diskController.fdcDrive[i].totalCylinders) << std::endl;
+					configFile << "Sides = " << (gimeBus.diskController.fdcDrive[i].isDoubleSided ? "2" : "1") << std::endl;
+					configFile << "DataDensity = " << (gimeBus.diskController.fdcDrive[i].isDoubleDensity ? "Double" : "Single") << std::endl;
+					if (gimeBus.diskController.fdcDrive[i].isDiskInserted)
+						configFile << "ImageFilePath = " << gimeBus.diskController.fdcDrive[i].imgFilePathname << std::endl;
+				}
+			}
+
+		if (gimeBus.emuDiskDriver.isEnabled && (gimeBus.emuDiskDriver.emuDiskDrive[0].imageMounted || gimeBus.emuDiskDriver.emuDiskDrive[1].imageMounted))
 		{
-			if (gimeBus.diskController.fdcDrive[i].isDriveAttached);
+			for (int i = 0; i < 2; i++)
+				if (gimeBus.emuDiskDriver.emuDiskDrive[i].imageMounted)
+				{
+					configFile << std::endl << "[HDD " << std::to_string(i) << "]" << std::endl;
+					configFile << "ImageFilePath = " << gimeBus.emuDiskDriver.emuDiskDrive[i].imgFilePathname << std::endl;
+				}
 		}
+
+		for (int i = 0; i < 2; i++)
+			if (gimeBus.joystickDevice[i].isAttached)
+			{
+				configFile << std::endl << "[Joystick]" << std::endl;
+				configFile << "Port = " << gimeBus.joystickDevice[i].portName << std::endl;
+				configFile << "DeviceType = " << gimeBus.joystickTypeName[gimeBus.joystickDevice[i].deviceType] << std::endl;
+			}
+
+		std::cout << "Successfully saved settings to config file." << std::endl;
+		configFile.close();
+	}
+	else if (commandWord == "LOAD")
+	{
+		uint8_t configLoadStatus = loadConfigFile();
+		if (configLoadStatus == CONFIG_ERROR_OPENING_FILE)
+			std::cout << "Error: Could not open config file." << std::endl;
+		else if (configLoadStatus == CONFIG_ERROR_INVALID_SYNTAX)
+			std::cout << "Error: Invalid syntax encountered in config file. Aborted." << std::endl;
+		else if (configLoadStatus == CONFIG_ERROR_MOUNTING_DISK)
+			std::cout << "Error: Could not mount disk image in config file." << std::endl;
+		else
+			std::cout << "Successfully loaded config file." << std::endl;
 	}
 	else if ((commandWord == "HDD") && gimeBus.emuDiskDriver.isEnabled)
 	{
@@ -342,14 +413,90 @@ bool CoCoEmuPGE::OnConsoleCommand(const std::string& sText)
 			std::string diskImageFilename = nextStringWord(sText);
 			uint8_t mountResult = gimeBus.emuDiskDriver.vhdMountDisk(targetDriveNum, diskImageFilename);
 			if (mountResult == EMUDISK_OPERATION_COMPLETE)
-				std::cout << "Successfully mounted " << diskImageFilename << " to Hard Disk Drive " << std::to_string(targetDriveNum) << std::endl;
+				std::cout << "Successfully mounted " << diskImageFilename << " to HDD " << std::to_string(targetDriveNum) << std::endl;
+			else if (mountResult == EMUDISK_ERROR_NOT_ENABLED)
+				std::cout << "Error: EmuDisk driver is not enabled." << std::endl;
 			else
 				std::cout << "Error: Disk image mount failed." << std::endl;
 		}
+		else if (subCommandWord == "EJECT")
+		{
+			uint8_t targetDriveNum = std::stoi(nextStringWord(sText));
+			uint8_t ejectStatus = gimeBus.emuDiskDriver.vhdEjectDisk(targetDriveNum);
+			if (ejectStatus == EMUDISK_ERROR_NOT_ENABLED)
+				std::cout << "Error: EmuDisk driver is not enabled." << std::endl;
+			else if (ejectStatus == EMUDISK_ERROR_NO_DISK_MOUNTED)
+				std::cout << "Error: No HDD image file is currently mounted to HDD " << targetDriveNum << std::endl;
+			else
+				std::cout << "Successfully ejected HDD image file from HDD " << targetDriveNum << std::endl;
+		}
+	}
+	else if (commandWord == "STATUS")
+	{
+		std::cout << std::endl << "Emulator Status" << std::endl << "---------------" << std::endl;
+
+		for (int i = 0; i < 2; i++)
+		{
+			std::cout << "Joystick " << gimeBus.joystickDevice[i].portName << " Port";
+			if (i == JOYSTICK_PORT_LEFT)
+				std::cout << "  = ";
+			else
+				std::cout << " = ";
+			if (gimeBus.joystickDevice[i].isAttached)
+				std::cout << "Connected to " << gimeBus.joystickTypeName[gimeBus.joystickDevice[i].deviceType];
+			else
+				std::cout << "Not connected";
+			std::cout << std::endl;
+		}
+
+		std::string strStatusFDC = gimeBus.diskController.isConnected ? "Enabled" : "Disabled";
+		std::cout << std::endl << "FD502 Floppy Disk Controller = " << strStatusFDC << std::endl;
+		std::string strStatusEmuDisk = gimeBus.emuDiskDriver.isEnabled ? "Enabled" : "Disabled";
+		std::cout << "EmuDisk Virtual HDD Driver   = " << strStatusEmuDisk << std::endl;
+		
+		if (gimeBus.diskController.isConnected)
+		{
+			for (int i = 0; i < 3; i++)
+			{
+				if (gimeBus.diskController.fdcDrive[i].isDriveAttached)
+				{
+					std::cout << std::endl << "[Drive " << std::to_string(i) << " Connected]" << std::endl;
+					std::cout << "Tracks Supported  = " << std::to_string(gimeBus.diskController.fdcDrive[i].totalCylinders) << std::endl;
+					std::cout << "Double-sided?       " << (gimeBus.diskController.fdcDrive[i].isDoubleSided ? "Yes" : "No") << std::endl;
+					std::cout << "Double-density?     " << (gimeBus.diskController.fdcDrive[i].isDoubleDensity ? "Yes" : "No") << std::endl;
+					std::cout << "Mounted Disk Image: ";
+
+					if (gimeBus.diskController.fdcDrive[i].isDiskInserted)
+					{
+						std::cout << gimeBus.diskController.fdcDrive[i].imgFilePathname << std::endl;
+						std::cout << "                    - Tracks/Side     = " << std::to_string(gimeBus.diskController.fdcDrive[i].diskImageGeometry->tracksPerSide) << std::endl;
+						std::cout << "                    - Sectors/Track   = " << std::to_string(gimeBus.diskController.fdcDrive[i].diskImageGeometry->sectorsPerTrack) << std::endl;
+						std::cout << "                    - Number of Sides = " << std::to_string(gimeBus.diskController.fdcDrive[i].diskImageGeometry->totalSides) << std::endl;
+					}
+					else
+						std::cout << "NONE" << std::endl;  
+				}
+			}
+		}
+
+		if (gimeBus.emuDiskDriver.isEnabled)
+		{
+			for (int i = 0; i < 2; i++)
+			{
+				if (gimeBus.emuDiskDriver.emuDiskDrive[i].imageMounted)
+				{
+					std::cout << std::endl << "[HDD " << std::to_string(i) << " Mounted]" << std::endl;
+					std::cout << "Mounted Image File:  " << gimeBus.emuDiskDriver.emuDiskDrive[i].imgFilePathname << std::endl;
+					std::cout << "HDD Size (in bytes): " << std::to_string(gimeBus.emuDiskDriver.emuDiskDrive[i].diskImageFilesize) << std::endl;
+				}
+			}
+		}
+
 	}
 	else
 		std::cout << "Error: Invalid command. Type HELP for a list of supported commands." << std::endl;
 
+	std::cout << std::endl;
 	return true;
 }
 
@@ -453,6 +600,192 @@ DeviceROM* CoCoEmuPGE::loadFileROM(const char* romFilePath)
 	fclose(romFile);
 
 	return newRomFile;
+}
+
+uint8_t CoCoEmuPGE::loadConfigFile()
+{
+	std::string inputLine;
+	configResultStruct curConfigLine;
+	std::ifstream configFile("coco3emu.conf");
+
+	if (!configFile.is_open())
+		return CONFIG_ERROR_OPENING_FILE;
+
+	while (std::getline(configFile, inputLine))
+	{
+		if (inputLine == "[Attached]")
+		{
+			while (std::getline(configFile, inputLine) && !inputLine.empty())
+			{
+				curConfigLine = parseConfigLine(inputLine);
+				if (curConfigLine.validResult && curConfigLine.paramKeyword == "DEVICE")
+				{
+					if (curConfigLine.paramValue == "FD502")
+					{
+						std::cout << "FD502 Connected" << std::endl;
+						gimeBus.diskController.isConnected = true;
+					}
+					else if (curConfigLine.paramValue == "EMUDISK")
+					{
+						std::cout << "EmuDisk Driver Enabled" << std::endl;
+						gimeBus.emuDiskDriver.isEnabled = true;
+					}
+				}
+			}
+		}
+		else if (inputLine.substr(0, 7) == "[Drive ")
+		{
+			int driveNum = -1;
+			if (!std::isdigit(inputLine.at(7)) || (inputLine.at(7) > '2') || (inputLine.at(8) != ']'))
+				return CONFIG_ERROR_INVALID_SYNTAX;		// Invalid config file
+			else
+				driveNum = inputLine.at(7) - '0';	// convert ascii number to its integer equivalent
+
+			driveStruct driveDef;
+			bool validDriveConfig = true;
+			std::string imageFilepath;
+			
+			while (std::getline(configFile, inputLine) && !inputLine.empty())
+			{
+				curConfigLine = parseConfigLine(inputLine);
+				if (curConfigLine.validResult)
+				{
+					if (curConfigLine.paramKeyword == "PHYSICALTRACKS")
+						try { driveDef.totalCylinders = std::stoi(curConfigLine.paramValue); }
+						catch (std::exception& ex) { validDriveConfig = false; }
+					else if (curConfigLine.paramKeyword == "SIDES")
+					{
+						if (curConfigLine.paramValue == "2")
+							driveDef.isDoubleSided = true;
+						else if (curConfigLine.paramValue == "1")
+							driveDef.isDoubleSided = false;
+						else
+							validDriveConfig = false;
+					}
+					else if (curConfigLine.paramKeyword == "DATADENSITY")
+					{
+						if (curConfigLine.paramValue == "SINGLE")
+							driveDef.isDoubleDensity = false;
+						else if (curConfigLine.paramValue == "DOUBLE")
+							driveDef.isDoubleDensity = true;
+						else
+							validDriveConfig = false;
+					}
+					else if (curConfigLine.paramKeyword == "IMAGEFILEPATH")
+						imageFilepath = curConfigLine.paramValue;
+					else
+						validDriveConfig = false;
+				}
+			}
+			
+			if (validDriveConfig)
+			{
+				driveDef.isDriveAttached = true;
+				gimeBus.diskController.fdcDrive[driveNum] = driveDef;
+				//std::cout << "Loaded valid config for Drive " << driveNum << std::endl;
+				if (!imageFilepath.empty())
+				{
+					if (gimeBus.diskController.fdcInsertDisk(driveNum, imageFilepath) != FD502_OPERATION_COMPLETE)
+						//std::cout << "Error mounting config file disk image " << imageFilepath << std::endl;
+						return CONFIG_ERROR_MOUNTING_DISK;
+					//else
+						//std::cout << "Successfully mounted disk image " << imageFilepath << std::endl;
+
+				}
+			}
+		}
+		else if (inputLine.substr(0, 5) == "[HDD ")
+		{
+			int driveNum = -1;
+			if (!std::isdigit(inputLine.at(5)) || (inputLine.at(5) > '1') || (inputLine.at(6) != ']'))
+				return CONFIG_ERROR_INVALID_SYNTAX;		// Invalid config file
+			else
+				driveNum = inputLine.at(5) - '0';	// convert ascii number to its integer equivalent
+
+			while (std::getline(configFile, inputLine) && !inputLine.empty())
+			{
+				curConfigLine = parseConfigLine(inputLine);
+				if (curConfigLine.validResult && (curConfigLine.paramKeyword == "IMAGEFILEPATH") && !curConfigLine.paramValue.empty())
+				{
+					if (gimeBus.emuDiskDriver.vhdMountDisk(driveNum, curConfigLine.paramValue) != EMUDISK_OPERATION_COMPLETE)
+						//std::cout << "Successfully mounted HDD image " << curConfigLine.paramValue << std::endl;
+						return CONFIG_ERROR_MOUNTING_DISK;
+					//else
+						//std::cout << "Error mounting config HDD image " << curConfigLine.paramValue << std::endl;
+				}
+			}
+		}
+		else if (inputLine.substr(0, 10) == "[Joystick]")
+		{
+			int portNum = -1, deviceType = -1;
+			while (std::getline(configFile, inputLine) && !inputLine.empty())
+			{
+				curConfigLine = parseConfigLine(inputLine);
+				if (curConfigLine.validResult)
+				{
+					if (curConfigLine.paramValue.empty())
+						return CONFIG_ERROR_INVALID_SYNTAX;
+					if (curConfigLine.paramKeyword == "PORT")
+					{
+						if (curConfigLine.paramValue == "RIGHT")
+							portNum = JOYSTICK_PORT_RIGHT;
+						else if (curConfigLine.paramValue == "LEFT")
+							portNum = JOYSTICK_PORT_LEFT;
+						else
+							return CONFIG_ERROR_INVALID_SYNTAX;
+					}
+					else if (curConfigLine.paramKeyword == "DEVICETYPE")
+					{
+						if (curConfigLine.paramValue == "KEYBOARD")
+							deviceType = JOYSTICK_DEVICE_KEYBOARD;
+						else if (curConfigLine.paramValue == "MOUSE")
+							deviceType = JOYSTICK_DEVICE_MOUSE;
+						else if (curConfigLine.paramValue == "GANEPAD")
+							deviceType = JOYSTICK_DEVICE_GAMEPAD;
+						else
+							return CONFIG_ERROR_INVALID_SYNTAX;
+					}
+					else
+						return CONFIG_ERROR_INVALID_SYNTAX;
+				}
+				else
+					return CONFIG_ERROR_INVALID_SYNTAX;
+			}
+
+			gimeBus.joystickDevice[portNum].deviceType = deviceType;
+			gimeBus.joystickDevice[portNum].isAttached = true;
+			//std::cout << "Joystick port " << gimeBus.joystickDevice[portNum].portName << " connected to device " << gimeBus.joystickTypeName[deviceType] << std::endl;
+		}
+	}
+
+	configFile.close();
+	return CONFIG_SUCCESSFULLY_LOADED;
+}
+
+configResultStruct CoCoEmuPGE::parseConfigLine(std::string inputLine)
+{
+	configResultStruct paramLineResult = { false, "", "" };
+
+	// First skip any leading whitespace. If it finds no other valid characters, return empty string
+	unsigned int indexOfFirstChar = inputLine.find_first_not_of(" \t\n\r");
+	if (indexOfFirstChar == std::string::npos)
+		return paramLineResult;
+	// Next find the end of param keyword by searching for either equal-sign or space as delimitter
+	unsigned int indexOfDelimitter = inputLine.find(" =", indexOfFirstChar);
+	if (indexOfDelimitter == std::string::npos)
+		return paramLineResult;
+
+	paramLineResult.paramKeyword = stringToUpper(inputLine.substr(indexOfFirstChar, indexOfDelimitter - indexOfFirstChar));
+	unsigned int indexOfParamBegin = inputLine.find_first_not_of(" \t\n\r", indexOfDelimitter + 1);
+	if (indexOfParamBegin != std::string::npos)
+	{
+		// If the config file is using an equal-sign as delimitter, skip over it and find the next valid character
+		if (inputLine.at(indexOfParamBegin) == '=')
+			indexOfParamBegin = inputLine.find_first_not_of(" \t\n\r", indexOfParamBegin + 1);
+		paramLineResult.paramValue = stringToUpper(inputLine.substr(indexOfParamBegin, inputLine.length() - indexOfParamBegin));
+		paramLineResult.validResult = true;
+	}
+	return paramLineResult;
 }
 
 void CoCoEmuPGE::renderScanlineVDG(unsigned int curScanline)
@@ -782,11 +1115,55 @@ bool CoCoEmuPGE::updateStatusBar()
 
 float CoCoEmuPGE::SoundHandler(int nChannel, float fGlobalTime, float fTimeStep)
 {
-	/*
-	if ((gimeBus.devPIA1.SideA.dataReg >> 2) != 0)
-		printf("Sound = %u\n", (gimeBus.devPIA1.SideA.dataReg >> 2));
+	//return 0;
+
+	if (nChannel != 0)
+		return 0;
+
+	if (leftAudioBuffer.empty())
+	{
+		printf("Audio buffer is empty!\n");
+		return 0;
+	}
+
+	cocoAudioSample = leftAudioBuffer.front();
+	leftAudioBuffer.pop();
+	return cocoAudioSample;
+	
+	if ((nChannel != 0) && (nChannel != 1))
+		printf("Weird channel!!\n");
+
+	if (audioBufferReady)
+	{
+		if (leftAudioBuffer.empty() || rightAudioBuffer.empty())
+		{
+			printf("Error: Audio buffer %d is empty!\n", nChannel);
+			return 0;
+		}
+
+		if (nChannel == 0)
+		{
+			cocoAudioSample = leftAudioBuffer.front();
+			unsigned int size = leftAudioBuffer.size();
+ 			leftAudioBuffer.pop();
+		}
+		else if (nChannel == 1)
+		{
+			cocoAudioSample = rightAudioBuffer.front();
+			rightAudioBuffer.pop();
+		}
+		return cocoAudioSample;
+	}
+	else
+	{
+		printf("Audio buffer not ready yet.\n");
+		return 0;
+	}
+
+	
+
+	//if ((gimeBus.devPIA1.SideA.dataReg >> 2) != 0)
+	//	printf("Sound = %u\n", (gimeBus.devPIA1.SideA.dataReg >> 2));
 	//return sin(fGlobalTime * 440.0f * 2.0f * 3.14159f);
-	return ((gimeBus.devPIA1.SideA.dataReg >> 2) / 64.0f);
-	*/
-	return 0;
+	//return 0;
 }

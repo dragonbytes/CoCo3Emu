@@ -26,6 +26,9 @@ constexpr double gimeFrameTime_PAL = gimeMasterClock_PAL / 60;
 constexpr double cpuClockFreq_NTSC = gimeMasterClock_NTSC / 4;
 constexpr double cpuFrameTime_NTSC = cpuClockFreq_NTSC / 60;
 
+constexpr unsigned int gimePerFloppyRotation = (gimeMasterClock_NTSC / 5);
+constexpr unsigned int gimeFloppyIndexWidth = (2056 * 32);	// I estimated using MAME debuger that 2056 6809 CPU cycles pass between leading edge of index hole and trailing edge (about 2.3 milliseconds)
+
 constexpr int gimeTimerOffset = 2;						// 1986 GIMEs process an additional 2 counts of the timer from what the user sets, 1987 revision is only 1 instead of 2.
 
 // GIME Register Definitions
@@ -73,7 +76,7 @@ constexpr uint8_t ROW0 = 0x01;
 
 constexpr uint8_t JOYSTICK_DEVICE_KEYBOARD		= 0;
 constexpr uint8_t JOYSTICK_DEVICE_MOUSE			= 1;
-constexpr uint8_t JOYSTICK_DEVICE_CONTROLLER	= 2;
+constexpr uint8_t JOYSTICK_DEVICE_GAMEPAD	= 2;
 
 constexpr uint8_t JOYSTICK_PORT_RIGHT	 = 0;
 constexpr uint8_t JOYSTICK_PORT_LEFT	 = 1;
@@ -122,7 +125,7 @@ class GimeBus
 		//std::vector<olc::Pixel> offscreenBuffer;
 		uint16_t ramTotalSizeKB, curResolutionWidth;
 		uint8_t curResolutionHeight;
-		unsigned int masterBusCycleCounter;
+		unsigned int masterBusCycleCounter, floppyIndexHoleCounter = 0;
 		unsigned int scanlineCounter, dotCounter;	// 1024 GIME cycles for Active Display Area, 1484 GIME cycles for start of left border to end of right border, 1820 GIME cycles for EVERYTHING together, 336 GIME cycles of horizontal blanking period
 		int cpuClockDivisor;
 		uint32_t videoStartAddr, ramSizeMask;
@@ -133,6 +136,7 @@ class GimeBus
 
 		struct joystickStruct
 		{
+			std::string portName;
 			bool isAttached;
 			bool buttonDown1;
 			bool buttonDown2;
@@ -142,6 +146,7 @@ class GimeBus
 		};
 
 		joystickStruct joystickDevice[2];
+		std::string joystickTypeName[3] = { "KEYBOARD", "MOUSE", "GAMEPAD" };
 
 		struct vdgConfig
 		{
@@ -259,6 +264,13 @@ class GimeBus
 			{olc::OEM_4, false},	{olc::H, false}, {olc::P, false}, {olc::X, false},		{olc::K0, false}, {olc::K8, false},		{olc::ENTER, false}
 		};
 
+		// Orch-90 Variables
+		struct
+		{
+			uint8_t rightChannel;
+			uint8_t leftChannel;
+		} orch90dac;
+
 		void ConnectBusGime(CoCoEmuPGE* inputPtr) { mainPtr = inputPtr; }
 		uint8_t readPhysicalByte(uint16_t);
 		uint8_t writePhysicalByte(uint16_t, uint8_t);
@@ -273,7 +285,7 @@ class GimeBus
 	private:
 		CoCoEmuPGE* mainPtr = nullptr;
 		const unsigned int vdgColumnsPerRow = 32;
-		unsigned int floppySeekIntervalCounter, floppyAccessIntervalCounter;
+		unsigned int floppySeekIntervalCounter, floppyAccessIntervalCounter, floppyFormatIndexCounter;
 		uint8_t vdgCharLineOffset, curVDGchar, fontDataByte, joystickPortIndex, joystickAxisValue, joystickCompareResult, returnByte, tempByte;
 		uint16_t scanlineIndex, rowPixelCounter, vdgFontDataIndex;
 		uint32_t vdgScreenRamPtr;

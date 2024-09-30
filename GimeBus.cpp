@@ -15,6 +15,10 @@ GimeBus::GimeBus()
 	diskController.ConnectToBus(this);
 	emuDiskDriver.ConnectToBus(this);
 	//serial.ConnectToBus(this);
+
+	// Joysticks state setup
+	joystickDevice[JOYSTICK_PORT_RIGHT].portName = "RIGHT";
+	joystickDevice[JOYSTICK_PORT_LEFT].portName = "LEFT";
 	
 	// Setup GIME registers initial states
 	gimeAllRamModeEnabled = false;							// Initial state has ROM mapped into memory
@@ -85,44 +89,75 @@ void GimeBus::gimeBusClockTick()
 	dotCounter++;
 	masterBusCycleCounter++;
 
-	if (diskController.isConnected && (diskController.fdcPendingCommand != FDC_OP_NONE))
+	if (diskController.isConnected)
 	{
-		// Check if we are processing a floppy head-stepping related command and handle it if so
-		if ((diskController.fdcPendingCommand >= FDC_OP_RESTORE) && (diskController.fdcPendingCommand <= FDC_OP_STEP_OUT))
+		// Check if the emulated disk is spinning, and if so, emulate the state of the Index Pulse
+		if (diskController.fdcMotorOn)
 		{
-			floppySeekIntervalCounter++;
-			if (floppySeekIntervalCounter > 28636)
+			floppyIndexHoleCounter++;
+			// Set the internal Floppy Index Pulse state if we are at the right points in the counter/rotation
+			if (floppyIndexHoleCounter >= gimePerFloppyRotation)
 			{
-				// 28636 GIME cycles approximately works out to be 1 millisecond in real-time, which we can use to time our floppy head-stepping rate
-				floppySeekIntervalCounter = 0;
-				if (diskController.fdcHandleNextEvent() == FD502_OPERATION_COMPLETE)
+				diskController.fdcIndexPulse = false;
+				floppyIndexHoleCounter = 0;		// If the emulated floppy has completed one complete rotation (assuming 300 rpm), then reset our counter until next Index Pulse will occur
+			}
+			else if (floppyIndexHoleCounter >= (gimePerFloppyRotation - gimeFloppyIndexWidth))
+				diskController.fdcIndexPulse = true;
+		}
+
+		if (diskController.fdcPendingCommand != FDC_OP_NONE)
+		{
+			// Check if we are processing a "Type I" floppy head-stepping related command and handle it if so
+			if ((diskController.fdcPendingCommand >= FDC_OP_RESTORE) && (diskController.fdcPendingCommand <= FDC_OP_STEP_OUT))
+			{
+				// Copy internal Floppy Index Pulse state from internal variable to FDC Status Register (Bit 1)
+				if (diskController.fdcIndexPulse)
+					diskController.fdcStatusReg |= FDC_STATUS_I_INDEX;
+				else
+					diskController.fdcStatusReg &= ~FDC_STATUS_I_INDEX;
+
+				floppySeekIntervalCounter++;
+				if (floppySeekIntervalCounter > 28636)
 				{
-					diskController.fdcHaltFlag = false;
-					if (diskController.fdcDoubleDensity)
-						cpu.assertedInterrupts[INT_NMI] |= INT_ASSERT_MASK_NMI;		// NMI is only asserted when the controller is set for Double Density operation for some reason
+					// 28636 GIME cycles approximately works out to be 1 millisecond in real-time, which we can use to time our floppy head-stepping rate
+					floppySeekIntervalCounter = 0;
+					if (diskController.fdcHandleNextEvent() == FD502_OPERATION_COMPLETE)
+					{
+						diskController.fdcHaltFlag = false;
+						if (diskController.fdcDoubleDensity)
+							cpu.assertedInterrupts[INT_NMI] |= INT_ASSERT_MASK_NMI;		// NMI is only asserted when the controller is set for Double Density operation for some reason
+					}
 				}
 			}
-		}
-		// Check if active floppy access is happening, and if so, handle the next corresponding floppy event
-		else if (diskController.fdcMotorOn && (diskController.fdcPendingCommand >= FDC_OP_READ_SECTOR) && (diskController.fdcPendingCommand <= FDC_OP_WRITE_SECTOR))
-		{
-			floppyAccessIntervalCounter++;
-			if (!diskController.fdcHeadLoaded && (floppyAccessIntervalCounter > (28636 * 100)))
+			// If we are processing a "Type II or III" command and active floppy access is happening, handle the next corresponding floppy event
+			else if (diskController.fdcMotorOn && (diskController.fdcPendingCommand >= FDC_OP_READ_SECTOR) && (diskController.fdcPendingCommand <= FDC_OP_WRITE_TRACK))
+			{
+				floppyAccessIntervalCounter++;
+				if (!diskController.fdcHeadLoaded && (floppyAccessIntervalCounter > (28636 * 100)))
 				{
 					floppyAccessIntervalCounter = 0;
+					floppyFormatIndexCounter = 0;
 					diskController.fdcHeadLoaded = true;
 					if (diskController.fdcPendingCommand == FDC_OP_WRITE_SECTOR)
+					{
 						diskController.fdcStatusReg |= FDC_STATUS_II_III_DATA_REQUEST;
+						if (diskController.fdcHaltFlag)
+						{
+							cpu.cpuHardwareHalt = false;
+							cpu.cpuHaltAsserted = false;
+						}
+					}
 				}
-			else if (diskController.fdcHeadLoaded && (floppyAccessIntervalCounter > 916))
-			{
-				// 916 GIME Master Bus cycles works out to be approximately 32 microseconds (it's technically 916.3635200000006) which is the data rate defined in the docs for MFM (double density)
-				floppyAccessIntervalCounter = 0;
-				uint8_t fdcEventResult = diskController.fdcHandleNextEvent();
-				if (fdcEventResult == FD502_OPERATION_COMPLETE)
+				else if (diskController.fdcHeadLoaded && (floppyAccessIntervalCounter > 916))
 				{
-					if (diskController.fdcDoubleDensity)
-						cpu.assertedInterrupts[INT_NMI] |= INT_ASSERT_MASK_NMI;
+					// 916 GIME Master Bus cycles works out to be approximately 32 microseconds (it's technically 916.3635200000006) which is the data rate defined in the docs for MFM (double density)
+					floppyAccessIntervalCounter = 0;
+					uint8_t fdcEventResult = diskController.fdcHandleNextEvent();
+					if (fdcEventResult == FD502_OPERATION_COMPLETE)
+					{
+						if (diskController.fdcDoubleDensity)
+							cpu.assertedInterrupts[INT_NMI] |= INT_ASSERT_MASK_NMI;
+					}
 				}
 			}
 		}
@@ -660,6 +695,13 @@ uint8_t GimeBus::writeMemoryByte(uint16_t address, uint8_t byte)
 			case 0xFF4B:
 				if (diskController.isConnected)
 					diskController.fdcRegisterWrite(address, byte);
+				break;
+			// Orchestra-90 Pak Registers
+			case 0xFF7A:
+				orch90dac.leftChannel = byte;
+				break;
+			case 0xFF7B:
+				orch90dac.rightChannel = byte;
 				break;
 			// GIME Hardware Registers
 			case 0xFF90:		// GIME Initialization Register 0 (INIT0)
